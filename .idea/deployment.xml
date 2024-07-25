@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="forl@atcremers45.in.tum.de:58022 password (2)" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="forl@atcremers26.cvai.in.tum.de:58022 password (4)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_58" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="forl@atcremers26.cvai.in.tum.de:58022 password (5)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_170" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="forl@atcremers26.cvai.in.tum.de:58022 password (6)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/stud/forl/bachelor_thesis" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="forl@atcremers45.in.tum.de:58022 password (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/stud/forl/bachelor_thesis" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="forl@atcremers60.in.tum.de:58022 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/stud/forl/bachelor_thesis" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="forl@atcremers62.in.tum.de:58022 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/stud/forl/bachelor_thesis" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>

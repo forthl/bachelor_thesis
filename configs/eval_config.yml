@@ -1,0 +1,57 @@
+output_root: '../'
+pytorch_data_dir: '/home/stud/forl/storage/user/datadrive/pytorch-data/'
+results_dir: '/home/stud/forl/bachelor_thesis/'
+experiment_name: "cityscapes"
+clustering_algorithm: "dbscan" #("dbscan" or "bgmm")
+epsilon: 600 #used if dbscan is the clustering algorithm
+min_samples: 55 #used if dbscan is the clustering algorithm
+res: 320
+batch_size: 1
+num_workers: 1
+eval_N_M: True
+run_picie: True
+run_crf: True
+run_prediction: True
+dark_mode: True
+use_ddp: False
+InstanceClasses: ['road', 'sidewalk', 'parking', 'rail track', 'building',
+           'wall', 'fence', 'guard rail', 'bridge', 'tunnel',
+           'pole', 'polegroup', 'traffic light', 'traffic sign', 'vegetation',
+            'terrain', 'sky', 'person', 'rider', 'car',
+            'truck', 'bus', 'caravan', 'trailer', 'train',
+            'motorcycle', 'bicycle']
+resize_to_original: True
+resize_res: 1024
+
+model_paths:
+  #- "../geo-scene/checkpoints/saved_models/cocostuff27_vit_base_5.ckpt"
+  - "../geo-scene/checkpoints/saved_models/cityscapes_vit_base_1.ckpt"
+  #- "../saved_models/potsdam_test.ckpt"
+
+hydra:
+  run:
+    dir: "."
+  output_subdir: ~
+  #job_logging: "disabled"
+  #hydra_logging: "disabled"
+
+
+
+
+#stego:
+#output_root: '../'
+#pytorch_data_dir: 'dataset'
+#experiment_name: "Cityscapes"
+
+
+
+
+#InstanceClasses: [
+   #         'road', 'sidewalk', 'parking', 'rail track', 'building',
+    #        'wall', 'fence', 'guard rail', 'bridge', 'tunnel',
+    #        'pole', 'polegroup', 'traffic light', 'traffic sign', 'vegetation',
+     #       'terrain', 'sky', 'person', 'rider', 'car',
+      #      'truck', 'bus', 'caravan', 'trailer', 'train',
+      #      'motorcycle', 'bicycle']
+
+
