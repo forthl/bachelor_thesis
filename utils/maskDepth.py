@@ -2,7 +2,7 @@ import numpy as np
 
 import open3d as o3d
 
-from utils import cluster_algorithms_new
+from utils import cluster_algorithms
 
 
 # get masks from segmentations from gep_seg
@@ -128,9 +128,9 @@ def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_s
         max_k = min(20, point_cloud.shape[0])
 
         if clustering_algorithm == "bgmm":
-            cl = cluster_algorithms_new.BayesianGaussianMixtureModel(data=point_cloud, max_k=max_k)
+            cl = cluster_algorithms.BayesianGaussianMixtureModel(data=point_cloud, max_k=max_k)
         elif clustering_algorithm == "dbscan":
-            cl = cluster_algorithms_new.Dbscan(point_cloud, epsilon, min_samples)
+            cl = cluster_algorithms.Dbscan(point_cloud, epsilon, min_samples)
 
         try:
            labels = cl.find_clusters()

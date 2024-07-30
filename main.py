@@ -9,10 +9,10 @@ import torch.multiprocessing
 from PIL import Image
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
-import utils.maskDepth_new as maskD
+import utils.maskDepth as maskD
 from utils.train_segmentation import LitUnsupervisedSegmenter
 from tqdm import tqdm
-import utils.evaluation_utils_new as eval_utils
+import utils.evaluation_utils as eval_utils
 from multiprocessing import Manager, Process
 
 
@@ -71,7 +71,7 @@ def my_app(cfg: DictConfig) -> None:
         par_model = model.net
 
     count_naming = 0
-    count = [26]
+    count = [0]
 
     # TODO Try to patch the image into 320x320 and then feed it into the transformer
     for i, batch in enumerate(tqdm(loader)):
