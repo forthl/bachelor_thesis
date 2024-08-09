@@ -10,8 +10,8 @@ from PIL import *
 def get_assigment(preds,
                   instance):  # there might be less predicted instances than actual ones so make it that it returns correct result
 
-    preds = normalize_labels(preds)
-    instance = normalize_labels(instance)
+    #preds = normalize_labels(preds)
+    #instance = normalize_labels(instance)
 
     preds = torch.tensor(preds, dtype=torch.int32)
     instance = torch.tensor(instance, dtype=torch.int32)

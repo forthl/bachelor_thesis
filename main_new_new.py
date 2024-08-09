@@ -71,7 +71,7 @@ def my_app(cfg: DictConfig) -> None:
         par_model = model.net
 
     count_naming = 0
-    count = [0,1,2,3]
+    count = [0]
 
     # TODO Try to patch the image into 320x320 and then feed it into the transformer
     for i, batch in enumerate(tqdm(loader)):
@@ -120,11 +120,9 @@ def my_app(cfg: DictConfig) -> None:
             cluster_crf = cluster_crf.unsqueeze(0)
             cluster_crf = cluster_crf.argmax(1).cuda()
 
-            model.test_cluster_metrics.update(cluster_crf, semantic_target)
+            model.test_cluster_metrics.update(cluster_crf, instance_target)
             model.test_cluster_metrics.compute()
-            #tb_metrics = {
-               # **model.test_linear_metrics.compute(),
-               # **model.test_cluster_metrics.compute(), }
+
 
             predicted_semantic_mask_colored = model.label_cmap[
                 model.test_cluster_metrics.map_clusters(cluster_crf.cpu())].astype(np.uint8)
@@ -185,8 +183,8 @@ def my_app(cfg: DictConfig) -> None:
             else:
                 raise ValueError("Clustering algorithm not supported. Please choose dbscan, bgmm or geo.")
 
-            #predicted_instance_mask = eval_utils.normalize_labels(predicted_instance_mask)
-            #instance_target = eval_utils.normalize_labels(instance_target)
+            predicted_instance_mask = eval_utils.normalize_labels(predicted_instance_mask)
+            instance_target = eval_utils.normalize_labels(instance_target)
             assignments = eval_utils.get_assigment(predicted_instance_mask,
                                                    instance_target)  # targetIDs, matched InstanceIDs
 

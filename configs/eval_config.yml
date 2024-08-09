@@ -20,7 +20,9 @@ InstanceClasses: ['road', 'sidewalk', 'parking', 'rail track', 'building',
             'terrain', 'sky', 'person', 'rider', 'car',
             'truck', 'bus', 'caravan', 'trailer', 'train',
             'motorcycle', 'bicycle']
-resize_to_original: True
+num_classes: 27
+num_predictions: 27 #choose num_predictions = num_classes for 1:1 Matching and num_predictions > num_classes for N:M Matching
+resize_to_original: False
 resize_res: 1024
 
 model_paths:
