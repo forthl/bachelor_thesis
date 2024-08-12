@@ -21,6 +21,8 @@ from multiprocessing import Manager, Process
 import utils.unsupervised_metrics
 import utils.utils_folder.unsupervised_metrics_new
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+import torch
+import torch.nn.functional as F
 
 
 @hydra.main(config_path="configs", config_name="eval_config.yml")
@@ -214,7 +216,7 @@ def my_app(cfg: DictConfig) -> None:
 
 
 
-    predicted_masks, targets = UnsupervisedMetrics.compute()
+    predictions, targets = UnsupervisedMetrics.compute()
 
 
 
@@ -224,17 +226,29 @@ def my_app(cfg: DictConfig) -> None:
     targets_formatted = []
 
 
-    for pred, target in zip(predicted_masks, targets):
+    for pred, target in zip(predictions, targets):
+        target = target.long()
+        pred = pred.long()
+        pred_one_hot = F.one_hot(pred).permute(2, 0, 1).to(torch.uint8)
+        target_one_hot = F.one_hot(target).permute(2, 0, 1).to(torch.uint8)
+
+        # Generate corresponding labels (assuming instance index is the class label)
+        pred_labels = torch.arange(pred_one_hot.shape[0])
+        target_labels = torch.arange(target_one_hot.shape[0])
+
+        # Create a dummy confidence score for each predicted instance (replace with actual model output)
+        pred_scores = torch.ones(pred_one_hot.shape[0])
 
         pred_dict = {
-            "labels": pred.flatten(),  # labels (Tensor): integer tensor of shape (num_boxes) containing 0-indexed detection classes for the boxes.
-            "masks": torch.nn.functional.one_hot(pred),  # Convert to boolean masks
+            "labels": pred_labels,  # List of labels for each predicted mask
+            "masks": pred_one_hot,  # Binary masks for each predicted instance
+            "scores": pred_scores,  # Confidence scores for each predicted instance
         }
         preds_formatted.append(pred_dict)
 
         target_dict = {
-            "labels": target.flatten(),  # Flattened labels
-            "masks": torch.nn.functional.one_hot(target),  # Convert to boolean masks
+            "labels": target_labels,  # List of labels for each ground truth mask
+            "masks": target_one_hot,  # Binary masks for each ground truth instance
         }
         targets_formatted.append(target_dict)
 
@@ -262,9 +276,7 @@ def worker(procnum, return_dict, depth_array, mask):
 
 
 def extract_segment_features(instance_mask, feature_map):
-    if isinstance(instance_mask, np.ndarray):
-        instance_mask = torch.from_numpy(instance_mask).to(feature_map.device)
-
+    instance_mask = torch.from_numpy(instance_mask)
     instance_mask = instance_mask.cpu()
     unique_segments = np.unique(instance_mask)
     num_segments = len(unique_segments)
