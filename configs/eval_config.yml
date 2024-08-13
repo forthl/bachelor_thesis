@@ -2,8 +2,8 @@ output_root: '../'
 pytorch_data_dir: '/home/stud/forl/storage/user/datadrive/pytorch-data/'
 results_dir: '/home/stud/forl/bachelor_thesis/'
 experiment_name: "cityscapes"
-clustering_algorithm: "geo" #("dbscan" or "bgmm" or "geo")
-epsilon: 600 #used if dbscan is the clustering algorithm
+clustering_algorithm: "dbscan" #("dbscan" or "bgmm" or "geo")
+epsilon: 100 #used if dbscan is the clustering algorithm
 min_samples: 55 #used if dbscan is the clustering algorithm
 res: 320
 batch_size: 1
@@ -21,7 +21,7 @@ InstanceClasses: ['road', 'sidewalk', 'parking', 'rail track', 'building',
             'truck', 'bus', 'caravan', 'trailer', 'train',
             'motorcycle', 'bicycle']
 num_classes: 27
-num_predictions: 27 #choose num_predictions = num_classes for 1:1 Matching and num_predictions > num_classes for N:M Matching
+num_predictions: 100 #choose num_predictions = num_classes for 1:1 Matching and num_predictions > num_classes for N:M Matching
 resize_to_original: False
 resize_res: 1024
 

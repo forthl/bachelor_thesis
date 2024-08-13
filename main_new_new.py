@@ -1,4 +1,8 @@
+from collections import Counter
+
 import matplotlib.pyplot as plt
+import numpy as np
+from torch import dtype, Tensor
 
 from datasets.depth_dataset import ContrastiveDepthDataset
 from utils.drive_seg_geo_transformation import labelRangeImage
@@ -14,7 +18,11 @@ from utils.train_segmentation import LitUnsupervisedSegmenter
 from tqdm import tqdm
 import utils.evaluation_utils as eval_utils
 from multiprocessing import Manager, Process
-
+import utils.unsupervised_metrics
+import utils.utils_folder.unsupervised_metrics_new
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
+import torch
+import torch.nn.functional as F
 
 
 @hydra.main(config_path="configs", config_name="eval_config.yml")
@@ -35,6 +43,8 @@ def my_app(cfg: DictConfig) -> None:
     os.makedirs(join(result_directory_path, "instance_target"), exist_ok=True)
     os.makedirs(join(result_directory_path, "instance_predicted"), exist_ok=True)
     os.makedirs(join(result_directory_path, "bounding_boxes"), exist_ok=True)
+
+
 
     for model_path in cfg.model_paths:
         model = LitUnsupervisedSegmenter.load_from_checkpoint(model_path)
@@ -71,87 +81,110 @@ def my_app(cfg: DictConfig) -> None:
         par_model = model.net
 
     count_naming = 0
-    count = [0]
+    count = [0,1,2,3,4,5,6,7,8,9,10,11,1,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    #count = list(range(101))
+    preds_formatted = []
+    targets_formatted = []
 
     # TODO Try to patch the image into 320x320 and then feed it into the transformer
     for i, batch in enumerate(tqdm(loader)):
         if i not in count:
-            continue
+           continue
 
-        with (torch.no_grad()):
+        with torch.no_grad():
             img = batch["img"].cuda()
             semantic_target = batch["label"].cuda()
-            depth = batch["depth"]
-            rgb_img = batch["real_img"]
-            instance_target = batch["instance"]
 
-            #try the way it si done in instance_segmentation_geo_trasmformstion_new too
 
-            instance_target = eval_utils.normalize_labels(instance_target[0].numpy())
-            depth = torch.squeeze(depth).numpy()
-
-            rgb_image = Image.fromarray(rgb_img[0].squeeze().numpy().astype(np.uint8))
-            rgb_image_array = np.array(rgb_image)
-            plt.imshow(rgb_image_array)
-            plt.show()
-            label_cpu = semantic_target.cpu()
-
-            semantic_mask_target_img = Image.fromarray(model.label_cmap[label_cpu[0].squeeze()].astype(np.uint8))
-            semantic_mask_target_img_array = np.array(semantic_mask_target_img)
-            plt.imshow(semantic_mask_target_img_array)
-            plt.show()
-            instance_mask_target_img = Image.fromarray(
-                grayscale_to_random_color(instance_target, image_shape, color_list).astype(np.uint8))
-            instance_mask_target_img_array = np.array(instance_mask_target_img)
-            plt.imshow(instance_mask_target_img_array)
-            plt.show()
 
             feats, code1 = par_model(img)
             feats, code2 = par_model(img.flip(dims=[3]))
             code = (code1 + code2.flip(dims=[3])) / 2
             code = F.interpolate(code, img.shape[-2:], mode='bilinear', align_corners=False)
 
-            linear_probs = torch.log_softmax(model.linear_probe(code), dim=1).cpu()
+            linear_probs = torch.log_softmax(model.linear_probe(code), dim=1)
             cluster_probs = model.cluster_probe(code, 2, log_probs=True).cpu()
 
-            # linear_crf = torch.from_numpy(dense_crf(img.detach().cpu()[0], linear_probs.detach().cpu()[0])).cuda()
+
+
             cluster_crf_numpy = dense_crf(img.detach().cpu()[0], cluster_probs.detach().cpu()[0])
             cluster_crf = torch.cat([torch.from_numpy(arr).unsqueeze(0) for arr in cluster_crf_numpy], dim=0)
             cluster_crf = cluster_crf.unsqueeze(0)
-            cluster_crf = cluster_crf.argmax(1).cuda()
-
-            model.test_cluster_metrics.update(cluster_crf, instance_target)
-            model.test_cluster_metrics.compute()
+            cluster_preds = cluster_crf.argmax(1).cuda()
 
 
-            predicted_semantic_mask_colored = model.label_cmap[
-                model.test_cluster_metrics.map_clusters(cluster_crf.cpu())].astype(np.uint8)
-            predicted_semantic_mask_img = Image.fromarray(predicted_semantic_mask_colored[0])
-            predicted_semantic_mask_img_array = np.array(predicted_semantic_mask_img)
-            plt.imshow(predicted_semantic_mask_img_array)
+            linear_crf_numpy = dense_crf(img.detach().cpu()[0], linear_probs.detach().cpu()[0])
+            linear_crf = torch.cat([torch.from_numpy(arr).unsqueeze(0) for arr in linear_crf_numpy], dim=0)
+            linear_crf = linear_crf.unsqueeze(0)
+            linear_preds = linear_crf.argmax(1).cuda()
+
+
+            model.test_linear_metrics.update(linear_preds, semantic_target)
+            model.test_cluster_metrics.update(cluster_preds, semantic_target)
+
+
+
+
+            tb_metrics = {
+                **model.test_linear_metrics.compute(),
+                **model.test_cluster_metrics.compute(), }
+
+
+
+
+    for i, batch in enumerate(tqdm(loader)):
+        if i not in count:
+            continue
+
+        with torch.no_grad():
+            img = batch["img"].cuda()
+            depth = batch["depth"]
+            depth = torch.squeeze(depth).numpy()
+            instance_target = batch["instance"]
+            rgb_img = batch["real_img"]
+            rgb_image = Image.fromarray(rgb_img[0].squeeze().numpy().astype(np.uint8))
+            rgb_image_array = np.array(rgb_image)
+            plt.imshow(rgb_image_array)
             plt.show()
 
-            filtered_semantic_mask = filter_classes_has_instance(
-                predicted_semantic_mask_colored[0])  # sets backgroung to 0
-            filtered_semantic_mask_img = Image.fromarray(filtered_semantic_mask.astype(np.uint8))
-            filtered_semantic_mask_img_array = np.array(filtered_semantic_mask_img)
-            plt.imshow(filtered_semantic_mask_img_array)
-            plt.show()
 
-            if cfg.resize_to_original:
-                filtered_semantic_mask = resize_mask(filtered_semantic_mask, image_shape)
-                filtered_semantic_mask_img = Image.fromarray(filtered_semantic_mask[0].astype(np.uint8))
+            feats, code1 = par_model(img)
+            feats, code2 = par_model(img.flip(dims=[3]))
+            code = (code1 + code2.flip(dims=[3])) / 2
+            code = F.interpolate(code, img.shape[-2:], mode='bilinear', align_corners=False)
+
+
+            cluster_probs = model.cluster_probe(code, 2, log_probs=True).cpu()
+
+
+
+            cluster_crf_numpy = dense_crf(img.detach().cpu()[0], cluster_probs.detach().cpu()[0])
+            cluster_crf = torch.cat([torch.from_numpy(arr).unsqueeze(0) for arr in cluster_crf_numpy], dim=0)
+            cluster_crf = cluster_crf.unsqueeze(0)
+            cluster_preds = cluster_crf.argmax(1)
+
+
+
+
+
+
+            predictions = model.test_cluster_metrics.map_clusters(cluster_preds)
+            predictions = predictions.squeeze(0)
+            predictions = predictions.cpu().numpy()
+            predictions_img = Image.fromarray(predictions.astype(np.uint8))
+
+
 
             if cfg.clustering_algorithm == "dbscan" or cfg.clustering_algorithm == "bgmm":
-                predicted_instance_mask = maskD.segmentation_to_instance_mask(filtered_semantic_mask_img, depth,
+                predicted_instance_mask = maskD.segmentation_to_instance_mask(predictions_img, depth,
                                                                               image_shape,
                                                                               clustering_algorithm=cfg.clustering_algorithm,
                                                                               epsilon=cfg.epsilon,
                                                                               min_samples=cfg.min_samples,
                                                                               project_data=True)
             elif cfg.clustering_algorithm == "geo":
-                masks = maskD.get_segmentation_masks(filtered_semantic_mask_img)
-                # remove the first element which is the mask containing pixels which are classes with no atributtes(e.g. road buildingi)
+                masks = maskD.get_segmentation_masks(predictions_img)
+
                 masks.pop(0)
 
                 manager = Manager()
@@ -168,7 +201,7 @@ def my_app(cfg: DictConfig) -> None:
 
                 current_num_instances = 0
                 predicted_instance_mask = np.zeros(masks[0].shape)
-                # fig, axeslist = plt.subplots(ncols=3, nrows=3)
+
 
                 for k in return_dict.keys():
                     labels = len(np.unique(return_dict[k])) - 1
@@ -183,86 +216,51 @@ def my_app(cfg: DictConfig) -> None:
             else:
                 raise ValueError("Clustering algorithm not supported. Please choose dbscan, bgmm or geo.")
 
-            predicted_instance_mask = eval_utils.normalize_labels(predicted_instance_mask)
-            instance_target = eval_utils.normalize_labels(instance_target)
-            assignments = eval_utils.get_assigment(predicted_instance_mask,
-                                                   instance_target)  # targetIDs, matched InstanceIDs
 
-            instance_mask_matched = np.zeros(image_shape)
-            instance_mask_not_matched = np.zeros(image_shape)
-
-            predicted_instance_ids = np.unique(predicted_instance_mask)
-
-            num_matched_instances = assignments[0].size
-
-            not_matched_instance_ids = np.setdiff1d(predicted_instance_ids, assignments[1])
-
-            for i, val in enumerate(assignments[1]):
-                mask = np.where(predicted_instance_mask == val, assignments[0][i], 0)
-                instance_mask_matched = instance_mask_matched + mask
-
-            for i, id in enumerate(not_matched_instance_ids):
-                instance_mask_not_matched = np.add(instance_mask_not_matched,
-                                                   np.where(predicted_instance_mask == id, num_matched_instances + i,
-                                                            0))
+            plt.imshow(predicted_instance_mask)
+            plt.show()
+            predictions_tensor = torch.tensor(predicted_instance_mask)
 
 
-            ############## N_M evaluation #########################
 
-            instance_mask_matched_N_M = np.add(instance_mask_matched, instance_mask_not_matched)
-
-            instance_mask_predicted_N_M = Image.fromarray(
-                grayscale_to_random_color(instance_mask_matched_N_M, image_shape, color_list).astype(np.uint8))
-            instance_mask_predicted_N_M_array = np.array(instance_mask_predicted_N_M)
-            plt.imshow(instance_mask_predicted_N_M_array)
+            targets = torch.tensor(instance_target).squeeze(0)
+            plt.imshow(targets.numpy())
             plt.show()
 
-            bounding_Boxes_N_M = eval_utils.get_bounding_boxes(instance_mask_matched_N_M).values()
+            targets = targets.long()
+            predictions_tensor = predictions_tensor.long()
+            pred_one_hot = F.one_hot(predictions_tensor).permute(2, 0, 1).to(torch.uint8)
+            target_one_hot = F.one_hot(targets).permute(2, 0, 1).to(torch.uint8)
 
-            img_boxes_N_M = Image.fromarray(
-                eval_utils.drawBoundingBoxes(np.array(rgb_image), bounding_Boxes_N_M, (0, 255, 0)).astype('uint8'))
-            img_boxes_N_M_array = np.array(img_boxes_N_M)
-            plt.imshow(img_boxes_N_M_array)
-            plt.show()
+            pred_labels = torch.arange(pred_one_hot.shape[0])
+            target_labels = torch.arange(target_one_hot.shape[0])
 
-            Avg_BBox_IoU, AP, AR, Avg_Pixel_IoU, B_Box_IoU, precision, recall, pixelIoU = eval_utils.get_avg_IoU_AP_AR(
-                instance_target, instance_mask_matched_N_M)
+            pred_scores = torch.ones(pred_one_hot.shape[0])
 
-            write_results(result_directory_path, count_naming, Avg_BBox_IoU, AP, AR, Avg_Pixel_IoU,
-                          B_Box_IoU, precision, recall, pixelIoU)
+            pred_dict = {
+                "labels": pred_labels,
+                "masks": pred_one_hot,  # Binary masks for each predicted instance
+                "scores": pred_scores,  # Dummy scores
+            }
+            preds_formatted.append(pred_dict)
 
-            write_images(result_directory_path, count_naming, rgb_image, semantic_mask_target_img, predicted_semantic_mask_img,
-                         instance_mask_target_img, instance_mask_predicted_N_M, img_boxes_N_M)
+            target_dict = {
+                "labels": target_labels,
+                "masks": target_one_hot,  # Binary masks for each ground truth instance
+            }
+            targets_formatted.append(target_dict)
 
-            ################# 1_1 evaluation  ##################
 
-            instance_mask_predicted_1_1 = Image.fromarray(
-                grayscale_to_random_color(instance_mask_matched, image_shape, color_list).astype(np.uint8))
-            instance_mask_predicted_1_1_array = np.array(instance_mask_predicted_1_1)
-            plt.imshow(instance_mask_predicted_1_1_array)
-            plt.show()
 
-            bounding_Boxes_1_1 = eval_utils.get_bounding_boxes(instance_mask_matched).values()
 
-            img_boxes_1_1 = Image.fromarray(
-                eval_utils.drawBoundingBoxes(np.array(rgb_image), bounding_Boxes_1_1, (0, 255, 0)).astype('uint8'))
-            img_boxes_1_1_array = np.array(img_boxes_1_1)
-            plt.imshow(img_boxes_1_1_array)
-            plt.show()
 
-            Avg_BBox_IoU1_1, AP1_1, AR1_1, Avg_Pixel_IoU1_1, B_Box_IoU1_1, precision1_1, recall1_1, pixelIoU1_1 = eval_utils.get_avg_IoU_AP_AR(
-                instance_target, instance_mask_matched)
+    metric = MeanAveragePrecision(iou_type="segm", class_metrics=True)
+    metric.update(preds_formatted, targets_formatted)
+    result = metric.compute()
+    print(result)
 
-            write_results(join(result_directory_path, "1_1"), count_naming, Avg_BBox_IoU1_1, AP1_1,
-                          AR1_1, Avg_Pixel_IoU1_1, B_Box_IoU1_1, precision1_1, recall1_1, pixelIoU1_1)
 
-            write_images(join(result_directory_path, "1_1"), count_naming, rgb_image, semantic_mask_target_img,
-                         predicted_semantic_mask_img,
-                         instance_mask_target_img, instance_mask_predicted_1_1, img_boxes_1_1)
 
-            count_naming += 1
-
-            print("breakpoint")
 
 
 def worker(procnum, return_dict, depth_array, mask):
@@ -271,6 +269,11 @@ def worker(procnum, return_dict, depth_array, mask):
 
     return_dict[procnum] = labelRangeImage(rel_depth)
 
+
+
+
 if __name__ == "__main__":
     prep_args()
     my_app()
+
+

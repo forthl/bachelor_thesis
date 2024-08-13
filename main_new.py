@@ -81,11 +81,8 @@ def my_app(cfg: DictConfig) -> None:
         par_model = model.net
 
     count_naming = 0
-    count = [0,1]
-
-
-
-
+    count = [0]
+    #count = list(range(101))
 
     # TODO Try to patch the image into 320x320 and then feed it into the transformer
     for i, batch in enumerate(tqdm(loader)):
@@ -224,25 +221,23 @@ def my_app(cfg: DictConfig) -> None:
 
     preds_formatted = []
     targets_formatted = []
-
-
     for pred, target in zip(predictions, targets):
         target = target.long()
         pred = pred.long()
         pred_one_hot = F.one_hot(pred).permute(2, 0, 1).to(torch.uint8)
         target_one_hot = F.one_hot(target).permute(2, 0, 1).to(torch.uint8)
 
-        # Generate corresponding labels (assuming instance index is the class label)
+
         pred_labels = torch.arange(pred_one_hot.shape[0])
         target_labels = torch.arange(target_one_hot.shape[0])
 
-        # Create a dummy confidence score for each predicted instance (replace with actual model output)
+
         pred_scores = torch.ones(pred_one_hot.shape[0])
 
         pred_dict = {
             "labels": pred_labels,  # List of labels for each predicted mask
             "masks": pred_one_hot,  # Binary masks for each predicted instance
-            "scores": pred_scores,  # Confidence scores for each predicted instance
+            "scores": pred_scores,  # Dummy scores
         }
         preds_formatted.append(pred_dict)
 
@@ -291,7 +286,7 @@ def extract_segment_features(instance_mask, feature_map):
         segment_mask = torch.from_numpy(segment_mask).unsqueeze(0).unsqueeze(0).to(feature_map.device)  # (1, H, W)
         segment_mask = torch.nn.functional.interpolate(segment_mask.float(), size =(height,width), mode='nearest').bool()
 
-        # Extract features for the segment
+
         segment_mask = segment_mask.squeeze(0)
         segment_features[i] = torch.mean(feature_map * segment_mask, dim=(2,3)).view(num_features)
 
