@@ -81,19 +81,21 @@ def my_app(cfg: DictConfig) -> None:
         par_model = model.net
 
     count_naming = 0
-    count = [0,1,2,3,4,5,6,7,8,9,10,11,1,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    #count = [0,1,2,3,4,5,6,7,8,9,10,11,1,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
     #count = list(range(101))
     preds_formatted = []
     targets_formatted = []
 
     # TODO Try to patch the image into 320x320 and then feed it into the transformer
     for i, batch in enumerate(tqdm(loader)):
-        if i not in count:
-           continue
+        #if i not in count:
+           #continue
 
         with torch.no_grad():
             img = batch["img"].cuda()
             semantic_target = batch["label"].cuda()
+
+
 
 
 
@@ -125,27 +127,39 @@ def my_app(cfg: DictConfig) -> None:
 
 
 
-            tb_metrics = {
-                **model.test_linear_metrics.compute(),
-                **model.test_cluster_metrics.compute(), }
+    tb_metrics = {
+        **model.test_linear_metrics.compute(),
+        **model.test_cluster_metrics.compute(), }
 
 
 
 
     for i, batch in enumerate(tqdm(loader)):
-        if i not in count:
-            continue
+        #if i not in count:
+           # continue
 
         with torch.no_grad():
             img = batch["img"].cuda()
             depth = batch["depth"]
             depth = torch.squeeze(depth).numpy()
             instance_target = batch["instance"]
+
+            semantic_target = batch["label"].cuda()
+
+
             rgb_img = batch["real_img"]
             rgb_image = Image.fromarray(rgb_img[0].squeeze().numpy().astype(np.uint8))
             rgb_image_array = np.array(rgb_image)
             plt.imshow(rgb_image_array)
             plt.show()
+
+            label_cpu = semantic_target.cpu()
+            semantic_mask_target_img = Image.fromarray(model.label_cmap[label_cpu[0].squeeze()].astype(np.uint8))
+            semantic_mask_target_img_array = np.array(semantic_mask_target_img)
+            plt.imshow(semantic_mask_target_img_array)
+            plt.show()
+
+
 
 
             feats, code1 = par_model(img)
@@ -168,10 +182,21 @@ def my_app(cfg: DictConfig) -> None:
 
 
 
+
             predictions = model.test_cluster_metrics.map_clusters(cluster_preds)
             predictions = predictions.squeeze(0)
             predictions = predictions.cpu().numpy()
+
+            plt.imshow(predictions)
+            plt.show()
+
             predictions_img = Image.fromarray(predictions.astype(np.uint8))
+
+            predictions_img_rgb = predictions_img.convert("RGB")
+            predictions_img_rgb_array =   np.array(predictions_img_rgb)
+            plt.imshow(predictions_img_rgb_array)
+            plt.show()
+
 
 
 
@@ -216,16 +241,17 @@ def my_app(cfg: DictConfig) -> None:
             else:
                 raise ValueError("Clustering algorithm not supported. Please choose dbscan, bgmm or geo.")
 
+            targets = torch.tensor(instance_target).squeeze(0)
+
+            plt.imshow(targets.numpy())
+            plt.show()
 
             plt.imshow(predicted_instance_mask)
             plt.show()
+
             predictions_tensor = torch.tensor(predicted_instance_mask)
 
 
-
-            targets = torch.tensor(instance_target).squeeze(0)
-            plt.imshow(targets.numpy())
-            plt.show()
 
             targets = targets.long()
             predictions_tensor = predictions_tensor.long()
