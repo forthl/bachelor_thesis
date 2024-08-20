@@ -82,7 +82,7 @@ def my_app(cfg: DictConfig) -> None:
 
     count_naming = 0
     #count = [0,1,2,3,4,5,6,7,8,9,10,11,1,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
-    #count = list(range(101))
+    count = list(range(10))
     preds_formatted = []
     targets_formatted = []
 
@@ -94,6 +94,8 @@ def my_app(cfg: DictConfig) -> None:
         with torch.no_grad():
             img = batch["img"].cuda()
             semantic_target = batch["label"].cuda()
+
+
 
 
 
@@ -115,6 +117,8 @@ def my_app(cfg: DictConfig) -> None:
             cluster_preds = cluster_crf.argmax(1).cuda()
 
 
+
+
             linear_crf_numpy = dense_crf(img.detach().cpu()[0], linear_probs.detach().cpu()[0])
             linear_crf = torch.cat([torch.from_numpy(arr).unsqueeze(0) for arr in linear_crf_numpy], dim=0)
             linear_crf = linear_crf.unsqueeze(0)
@@ -134,9 +138,11 @@ def my_app(cfg: DictConfig) -> None:
 
 
 
+
+
     for i, batch in enumerate(tqdm(loader)):
-        #if i not in count:
-           # continue
+        if i not in count:
+            continue
 
         with torch.no_grad():
             img = batch["img"].cuda()
@@ -177,38 +183,60 @@ def my_app(cfg: DictConfig) -> None:
             cluster_crf = cluster_crf.unsqueeze(0)
             cluster_preds = cluster_crf.argmax(1)
 
-
-
-
-
-
-
             predictions = model.test_cluster_metrics.map_clusters(cluster_preds)
-            predictions = predictions.squeeze(0)
-            predictions = predictions.cpu().numpy()
+            predictions = predictions.cpu()
+            predictions = predictions.squeeze()
 
-            plt.imshow(predictions)
+            predicted_semantic_mask_colored = model.label_cmap[
+                model.test_cluster_metrics.map_clusters(cluster_preds.cpu())].astype(np.uint8)
+            predicted_semantic_mask_img = Image.fromarray(predicted_semantic_mask_colored[0])
+            predicted_semantic_mask_img_array = np.array(predicted_semantic_mask_img)
+            plt.imshow(predicted_semantic_mask_img_array)
             plt.show()
 
-            predictions_img = Image.fromarray(predictions.astype(np.uint8))
-
-            predictions_img_rgb = predictions_img.convert("RGB")
-            predictions_img_rgb_array =   np.array(predictions_img_rgb)
-            plt.imshow(predictions_img_rgb_array)
+            filtered_semantic_mask = filter_classes_has_instance(
+                predicted_semantic_mask_colored[0])
+            filtered_semantic_mask_img = Image.fromarray(filtered_semantic_mask.astype(np.uint8))
+            filtered_semantic_mask_img_array = np.array(filtered_semantic_mask_img)
+            plt.imshow(filtered_semantic_mask_img_array)
             plt.show()
+
+
+
+
+
+
+
+            """
+            predictions = model.test_cluster_metrics.map_clusters(cluster_preds)
+            predictions = predictions.cpu()
+            predictions = predictions.squeeze()
+
+
+            predictions_mask_img = Image.fromarray(model.label_cmap[predictions].astype(np.uint8))
+            predictions_mask_img_array = np.array(predictions_mask_img)
+
+
+            plt.imshow(predictions_mask_img_array)
+            plt.show()
+            """
+
+
+
+
 
 
 
 
             if cfg.clustering_algorithm == "dbscan" or cfg.clustering_algorithm == "bgmm":
-                predicted_instance_mask = maskD.segmentation_to_instance_mask(predictions_img, depth,
+                predicted_instance_mask = maskD.segmentation_to_instance_mask(filtered_semantic_mask_img, depth,
                                                                               image_shape,
                                                                               clustering_algorithm=cfg.clustering_algorithm,
                                                                               epsilon=cfg.epsilon,
                                                                               min_samples=cfg.min_samples,
                                                                               project_data=True)
             elif cfg.clustering_algorithm == "geo":
-                masks = maskD.get_segmentation_masks(predictions_img)
+                masks = maskD.get_segmentation_masks(filtered_semantic_mask_img)
 
                 masks.pop(0)
 
@@ -249,19 +277,75 @@ def my_app(cfg: DictConfig) -> None:
             plt.imshow(predicted_instance_mask)
             plt.show()
 
+            instance_target_normalized = eval_utils.normalize_labels(instance_target[0].numpy())
+            instance_mask_target_img = Image.fromarray(
+                grayscale_to_random_color(instance_target_normalized, image_shape, color_list).astype(np.uint8))
+            instance_mask_target_img_array = np.array(instance_mask_target_img)
+            plt.imshow(instance_mask_target_img_array)
+            plt.show()
+
+
+
+
             predictions_tensor = torch.tensor(predicted_instance_mask)
+
+            predictions_tensor_normalized = eval_utils.normalize_labels(predictions_tensor.numpy())
+
+            instance_mask_prediction_img = Image.fromarray(
+                grayscale_to_random_color(predictions_tensor_normalized, image_shape, color_list).astype(np.uint8))
+            instance_mask_prediction_img_array = np.array(instance_mask_prediction_img)
+            plt.imshow(instance_mask_prediction_img_array)
+            plt.show()
 
 
 
             targets = targets.long()
             predictions_tensor = predictions_tensor.long()
+
             pred_one_hot = F.one_hot(predictions_tensor).permute(2, 0, 1).to(torch.uint8)
             target_one_hot = F.one_hot(targets).permute(2, 0, 1).to(torch.uint8)
 
-            pred_labels = torch.arange(pred_one_hot.shape[0])
-            target_labels = torch.arange(target_one_hot.shape[0])
+
+            pred_labels = torch.zeros(pred_one_hot.shape[0], dtype=torch.uint8)
+            target_labels = torch.zeros(target_one_hot.shape[0], dtype=torch.uint8)
+
+            for i in range(pred_one_hot.shape[0]-1, -1, -1):
+                binary_array = pred_one_hot[i].cpu().numpy()
+                class_array = predictions * binary_array
+                selected_values = class_array[binary_array == 1]
+                selected_values_tensor = torch.tensor(selected_values, dtype=torch.float32)
+                if selected_values_tensor.numel() < 10:
+                    pred_one_hot = torch.cat((pred_one_hot[:i], pred_one_hot[i + 1:]))
+                    continue
+                else:
+                    most_frequent_value = selected_values_tensor.mode().values.item()
+                if torch.isnan(torch.tensor(most_frequent_value)):
+                    most_frequent_value = 0
+
+                pred_labels[i] = int(most_frequent_value)
+
+            #semantic_target[semantic_target == -1] += 1
+            for i in range(target_one_hot.shape[0]-1, -1, -1):
+                binary_array = target_one_hot[i].cpu().numpy()
+                class_array = semantic_target.squeeze().cpu().numpy() * binary_array
+                selected_values = class_array[binary_array == 1]
+                selected_values_tensor = torch.tensor(selected_values, dtype=torch.float32)
+                if selected_values_tensor.numel() < 10:
+                    target_one_hot = torch.cat((target_one_hot[:i], target_one_hot[i + 1:]))
+                    continue
+                else:
+                    most_frequent_value = selected_values_tensor.mode().values.item()
+                if torch.isnan(torch.tensor(most_frequent_value)):
+                    most_frequent_value = 0
+
+                target_labels[i] = int(most_frequent_value)
+
+
+
 
             pred_scores = torch.ones(pred_one_hot.shape[0])
+            #shape = pred_one_hot.shape[0]
+            #pred_scores = torch.full((shape,), 0.5)
 
             pred_dict = {
                 "labels": pred_labels,

@@ -2,8 +2,9 @@ output_root: '../'
 pytorch_data_dir: '/home/stud/forl/storage/user/datadrive/pytorch-data/'
 results_dir: '/home/stud/forl/bachelor_thesis/'
 experiment_name: "cityscapes"
-clustering_algorithm: "geo" #("dbscan" or "bgmm" or "geo")
-epsilon: 100 #used if dbscan is the clustering algorithm
+clustering_algorithm: "bgmm" #("dbscan" or "bgmm" or "geo" or "no_clustering")
+considering_background: False
+epsilon: 600 #used if dbscan is the clustering algorithm
 min_samples: 55 #used if dbscan is the clustering algorithm
 res: 320
 batch_size: 1

@@ -14,10 +14,11 @@ def get_segmentation_masks_geo_seg(geo_seg):
         masks.append(segmentation)
     return masks
 
+
 class_colors = {
-    (0, 0, 0): 0, # unlabeled
-    (220, 20, 60): 17, # person 1
-    (255, 0, 0): 18, # rider 1
+    (0, 0, 0): 0,  # unlabeled
+    (220, 20, 60): 17,  # person 1
+    (255, 0, 0): 18,  # rider 1
     (0, 0, 142): 19,  # car 1
     (0, 0, 70): 20,  # truck 1
     (0, 60, 100): 21,  # bus 1
@@ -25,7 +26,7 @@ class_colors = {
     (0, 0, 110): 23,  # trailer
     (0, 80, 100): 24,  # train 1
     (0, 0, 230): 25,  # motorcycle 1
-    (119, 11, 32): 26 # bicycle 1
+    (119, 11, 32): 26  # bicycle 1
 }
 
 
@@ -34,7 +35,7 @@ def get_segmentation_masks(img):
     masks = []
     classes = []
     img_rgb = np.asarray(img)
-    
+
     I = img.convert('L')
     I = np.asarray(I)
     for c in np.unique(I):
@@ -43,17 +44,12 @@ def get_segmentation_masks(img):
 
         rgb_color = tuple(np.mean(img_rgb[segmentation], axis=0).astype(int))
         classes.append(class_colors[rgb_color])
-        
+
     return masks, classes
-
-
-
 
 
 # mask depth image with segmentations
 def get_masked_depth(depth_map, masks):
-
-
     masked_depths = []
 
     for mask in masks:
@@ -73,12 +69,10 @@ def create_point_clouds(masked_depths):
 
 
 def create_all_point_clouds(depth):
-
     non_zero = np.nonzero(depth)
     point_cloud = np.array([non_zero[0], non_zero[1], depth[non_zero[0], non_zero[1]]])
     point_cloud = np.transpose(point_cloud)
     return point_cloud
-
 
 
 def create_projected_point_clouds(masked_depths):
@@ -99,16 +93,15 @@ def unproject_point_cloud(data):
         point[0] = int(round((point[0] * focal_length_x / point[2]) + cx))
         point[1] = int(round((point[1] * focal_length_y / point[2]) + cy))
 
-    data = data[:,[1,0,2]]# convert from xyz coordinates to array indexes
+    data = data[:, [1, 0, 2]]  # convert from xyz coordinates to array indexes
     return data.astype('int')
 
 
-def project_disparity_to_3d(depth_map):#debug this shit cause the rescaling is wrong
-    focal_length_x = 2262.52/3.2
-    focal_length_y = 2265.3017905988554/3.2
-    cx = 1096.98/6.4
-    cy = 513.137/3.2
-
+def project_disparity_to_3d(depth_map):  # debug this shit cause the rescaling is wrong
+    focal_length_x = 2262.52 / 3.2
+    focal_length_y = 2265.3017905988554 / 3.2
+    cx = 1096.98 / 6.4
+    cy = 513.137 / 3.2
 
     height, width = depth_map.shape
 
@@ -117,8 +110,8 @@ def project_disparity_to_3d(depth_map):#debug this shit cause the rescaling is w
 
     # Filter out points with disparity value of 0
     valid_indices = np.where(depth_map != 0)
-    depth = depth_map[valid_indices]*1000/0.2645833333
-    depth = depth/3.2
+    depth = depth_map[valid_indices] * 1000 / 0.2645833333
+    depth = depth / 3.2
     points_x = (grid_x[valid_indices] - cx) * (depth / focal_length_x)
     points_y = (grid_y[valid_indices] - cy) * (depth / focal_length_y)
     points_z = depth
@@ -129,12 +122,13 @@ def project_disparity_to_3d(depth_map):#debug this shit cause the rescaling is w
     return point_cloud
 
 
-def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_shape, clustering_algorithm, epsilon ,min_samples ,project_data=False):
-    
+def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_shape, clustering_algorithm, epsilon,
+                                  min_samples, project_data=False):
     labels_list = []
 
     class_masks, classes = get_segmentation_masks(filtered_segmentation_mask)
-    class_masks.pop(0)  # remove the first element which is the mask containing pixels which are classes with no atributtes(e.g. road, building)
+    class_masks.pop(0) # remove the first element which is the mask containing pixels which are classes with no atributtes(e.g. road, building)
+    classes.pop(0) # remove the first element which is the mask containing pixels which are classes with no atributtes(e.g. road, building)
     masked_depths = get_masked_depth(depth_map, class_masks)
 
     point_clouds = []
@@ -147,7 +141,7 @@ def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_s
     instance_mask = np.zeros(image_shape)
     current_num_instances = 0
 
-    class_index = 0
+
 
     for Idx, point_cloud in enumerate(point_clouds):
 
@@ -162,7 +156,7 @@ def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_s
             cl = cluster_algorithms.Dbscan(point_cloud, epsilon, min_samples)
 
         try:
-           labels = cl.find_clusters()
+            labels = cl.find_clusters()
         except:
             labels = np.zeros(point_cloud.shape[0])
 
@@ -177,15 +171,15 @@ def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_s
         for index, point in enumerate(point_cloud):
             class_instance_mask[int(point[0]), int(point[1])] = labels[index]
 
-        num_clusters = len(set(labels)) - 1
+        num_clusters = len(set(labels))
         class_instance_mask = np.where(class_instance_mask != 0, class_instance_mask + current_num_instances, 0)
-        current_num_instances += num_clusters
-        instance_mask = np.add(instance_mask, class_instance_mask)
-        for i in range(class_index, class_index + num_clusters):
-            labels_list.append(classes[Idx])
-        class_index += num_clusters
 
-    instance_list = list(range(0, current_num_instances))
+        instance_mask = np.add(instance_mask, class_instance_mask)
+        for i in range(current_num_instances, current_num_instances + num_clusters):
+            labels_list.append(classes[Idx])
+        current_num_instances += num_clusters
+
+    instance_list = list(range(1, current_num_instances + 1))
     meyer = torch.unique(torch.tensor(instance_mask))
 
     return instance_mask, labels_list, instance_list
