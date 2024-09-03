@@ -1,11 +1,15 @@
-This is the code base for the concept presented in
-the bachelor thesis written by Leon Forth. 
+This is the code base for the SEDE-FILM-method presented in
+the bachelor thesis written by Leon Forth. Many ideas and some 
+code snippets originate from the code in https://github.com/valerfisch/geo-scene.
 
-After downloading the datasets and .. (so running all the
-files in the preconfigs folder)
-you should be able to run the code (main.py). 
-To change the settings (like the batch-size, the clustering method
-or the matching) please look into the configs.
+After downloading the datasets (so running all the
+files in the preconfigs folder) and run the file get_semantic_masks
+once to get the STEGO masks 
+you should be able to run the method (main.py). 
+
+To change the settings (the clustering method and the parameters
+or if filtering classes oder the FILME-method should be applied)
+please look into the file configs/eval_config.
 
 The datasets can be found in the datasets folder, all the
 helper-files in the utils folder.
