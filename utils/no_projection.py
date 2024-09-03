@@ -1,5 +1,5 @@
 from utils import cluster_algorithms
-from utils.maskDepth_new import get_segmentation_masks
+from utils.maskDepth import get_segmentation_masks
 from utils.utils_folder.stego_utils import filter_big_classes
 import numpy as np
 import torch

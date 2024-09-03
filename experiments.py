@@ -12,7 +12,7 @@ import torch.multiprocessing
 from PIL import Image
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
-import utils.maskDepth_new as maskD
+import utils.maskDepth as maskD
 from utils.train_segmentation import LitUnsupervisedSegmenter
 from tqdm import tqdm
 import utils.evaluation_utils as eval_utils
@@ -271,7 +271,7 @@ def my_app(cfg: DictConfig) -> None:
 
 
             else:
-                raise ValueError("Clustering algorithm not supported. Please choose dbscan, bgmm, geo or no_clustering.")
+                raise ValueError("Clustering algorithm not supported. Please choose dbscan, optics, bgmm, kmeans, geo or no_clustering.")
 
 
 
