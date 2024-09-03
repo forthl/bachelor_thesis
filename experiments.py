@@ -2,8 +2,10 @@ import ast
 import json
 
 from datasets.depth_dataset import ContrastiveDepthDataset
+from utils import no_projection
 from utils.drive_seg_geo_transformation import labelRangeImage
 from utils.eval_segmentation import dense_crf
+from utils.filter_instances import filter_instances
 from utils.modules.stego_modules import *
 import hydra
 import torch.multiprocessing
@@ -35,6 +37,9 @@ def my_app(cfg: DictConfig) -> None:
     os.makedirs(join(result_directory_path, "instance_predicted"), exist_ok=True)
 
     considering_background = cfg.considering_background
+    filtering_instances = cfg.filtering_instances
+    filtering_big_classes = cfg.filtering_big_classes
+    projection = cfg.projection
 
 
 
@@ -81,6 +86,8 @@ def my_app(cfg: DictConfig) -> None:
     predicted_instance_images = []
     target_instance_images = []
     target_semantic_images = []
+    filtered_predicted_semantic_images = []
+    filtered_predicted_instance_images = []
 
     predictions_path = os.path.join(semantic_path, "predictions.txt")
     predicted_masks_path = os.path.join(semantic_path, "predicted_semantic_masks_colored.txt")
@@ -105,12 +112,14 @@ def my_app(cfg: DictConfig) -> None:
 
 
     ten_constant_indices = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450]
-    #count = [222]
+    #count = [128, 347, 220, 74, 415, 398, 283, 92, 487, 310, 11, 239, 51, 146, 403]
+    #count = [1]
+
 
 
     for i, batch in enumerate(tqdm(loader)):
-        #if i not in count:
-            #continue
+       # if i not in count:
+           # continue
 
         with torch.no_grad():
 
@@ -149,34 +158,69 @@ def my_app(cfg: DictConfig) -> None:
             #filtering the instances the model shpuld predict (e.g. only cars, persons, etc.) like in cityscapes specified
             #other instances are set to 0 (background)
 
-            filtered_semantic_mask = filter_classes_has_instance(predicted_semantic_mask_colored[0])
+            filtered_semantic_mask = filter_mask(predicted_semantic_mask_colored[0])
             filtered_semantic_mask_img = Image.fromarray(filtered_semantic_mask.astype(np.uint8))
+            filtered_predicted_semantic_images.append(filtered_semantic_mask_img)
             filtered_semantic_mask_img_array = np.array(filtered_semantic_mask_img)
             plt.imshow(filtered_semantic_mask_img_array)
             plt.show()
 
 
 
-            if cfg.clustering_algorithm == "dbscan" or cfg.clustering_algorithm == "bgmm":
+            if cfg.clustering_algorithm == "dbscan" or cfg.clustering_algorithm == "optics" or cfg.clustering_algorithm == "bgmm" or cfg.clustering_algorithm == "kmeans":
 
-                predicted_instance_mask, labels_list, instance_list = maskD.segmentation_to_instance_mask(filtered_semantic_mask_img, depth,
-                                                                              image_shape,
-                                                                              clustering_algorithm=cfg.clustering_algorithm,
-                                                                              epsilon=cfg.epsilon,
-                                                                              min_samples=cfg.min_samples,
-                                                                              project_data=True)
+                if projection:
+                    predicted_instance_mask, labels_list, instance_list = maskD.segmentation_to_instance_mask(
+                        filtered_semantic_mask_img, depth,
+                        image_shape,
+                        clustering_algorithm=cfg.clustering_algorithm,
+                        epsilon=cfg.epsilon,
+                        min_samples=cfg.min_samples,
+                        max_eps=cfg.max_eps,
+                        metric=cfg.metric,
+                        cluster_method=cfg.cluster_method,
+                        n_clusters=cfg.n_clusters,
+                        max_k=cfg.max_k,
+                        bgmm_weights_threshold=cfg.bgmm_weights_threshold,
+                        covariance_type=cfg.covariance_type,
+                        init_params=cfg.init_params,
+                        project_data=True,
+                        filtering_big_classes=cfg.filtering_big_classes)
+                else:
+                    predicted_instance_mask, labels_list, instance_list = no_projection.segmentation_to_instance_mask(
+                        filtered_semantic_mask_img,
+                        image_shape,
+                        clustering_algorithm=cfg.clustering_algorithm,
+                        epsilon=cfg.epsilon,
+                        min_samples=cfg.min_samples,
+                        max_eps=cfg.max_eps,
+                        metric=cfg.metric,
+                        cluster_method=cfg.cluster_method,
+                        n_clusters=cfg.n_clusters,
+                        max_k=cfg.max_k,
+                        bgmm_weights_threshold=cfg.bgmm_weights_threshold,
+                        covariance_type=cfg.covariance_type,
+                        init_params=cfg.init_params,
+                        filtering_big_classes=cfg.filtering_big_classes)
+
+
+
             elif cfg.clustering_algorithm == "geo":
                 masks, classes = maskD.get_segmentation_masks(filtered_semantic_mask_img)
                 labels_list = []
 
                 masks.pop(0)
+                classes.pop(0)
+
+                if filtering_big_classes:
+                    masks, classes = filter_big_classes(masks, classes)
 
                 manager = Manager()
                 return_dict = manager.dict()
                 jobs = []
                 for i in range(len(masks)):
                     p = Process(target=worker, args=(
-                        i, return_dict, depth, masks[i]))
+                        i, return_dict, depth, masks[i], cfg.distance, cfg.threshold))
                     jobs.append(p)
                     p.start()
 
@@ -186,7 +230,7 @@ def my_app(cfg: DictConfig) -> None:
                 current_num_instances = 0
                 predicted_instance_mask = np.zeros(masks[0].shape)
 
-                class_index = 0
+
 
 
                 for k in return_dict.keys():
@@ -195,21 +239,24 @@ def my_app(cfg: DictConfig) -> None:
 
                     class_instance_mask = np.where(class_instance_mask != 0,
                                                    class_instance_mask + current_num_instances, 0)
-                    current_num_instances += labels
+
 
                     predicted_instance_mask = np.add(predicted_instance_mask, class_instance_mask)
 
-                    for i in range(class_index, class_index + labels):
+                    for i in range(current_num_instances, current_num_instances + labels):
                         labels_list.append(classes[k])
-                    class_index += labels
+                    current_num_instances += labels
 
-                instance_list = list(range(0, current_num_instances))
+                instance_list = list(range(1, current_num_instances + 1))
 
             elif cfg.clustering_algorithm == "no_clustering":
 
                 masks, classes = maskD.get_segmentation_masks(filtered_semantic_mask_img)
                 masks.pop(0)
                 classes.pop(0)
+                if filtering_big_classes:
+                    masks, classes = filter_big_classes(masks, classes)
+
                 instance_list = []
 
                 labels_list = []
@@ -231,9 +278,10 @@ def my_app(cfg: DictConfig) -> None:
 
             if considering_background:
                 labels_list.insert(0,0)
+                instance_list.insert(0,0)
 
 
-            pred_labels = torch.tensor(labels_list)
+            #pred_labels = torch.tensor(labels_list)
 
             targets = torch.tensor(instance_target).squeeze(0)
 
@@ -264,29 +312,39 @@ def my_app(cfg: DictConfig) -> None:
             instance_mask_prediction_img_array = np.array(instance_mask_prediction_img)
             plt.imshow(instance_mask_prediction_img_array)
             plt.show()
+            if filtering_instances:
+                filtered_instance_mask, filtered_labels_list, filtered_instance_list = filter_instances(
+                    predicted_instance_mask, labels_list, instance_list)
+            else:
+                filtered_instance_list = instance_list
+                filtered_labels_list = labels_list
+                filtered_instance_mask = predicted_instance_mask
+
+            filtered_predictions_tensor = torch.tensor(filtered_instance_mask)
+            pred_labels = torch.tensor(filtered_labels_list)
+
+            filtered_predictions_tensor_normalized = eval_utils.normalize_labels(filtered_predictions_tensor.numpy())
+            filtered_instance_mask_prediction_img = Image.fromarray(grayscale_to_random_color(filtered_predictions_tensor_normalized, image_shape, color_list).astype(np.uint8))
+            filtered_predicted_instance_images.append(filtered_instance_mask_prediction_img)
+            filtered_instance_mask_prediction_img_array  = np.array(filtered_instance_mask_prediction_img)
+            plt.imshow(filtered_instance_mask_prediction_img_array)
+            plt.show()
 
 
-            #unique_pred_labels = torch.unique(predictions_tensor)
-            pred_masks = torch.zeros((len(instance_list), image_shape[0], image_shape[1]), dtype=torch.uint8)
+
+            pred_masks = torch.zeros((len(filtered_instance_list), image_shape[0], image_shape[1]), dtype=torch.uint8)
             index = 0
-            for i in instance_list:
-                pred_masks[index] = (predictions_tensor == i).to(torch.uint8)
+            for i in filtered_instance_list:
+                meyer = (filtered_predictions_tensor.numpy() == i).astype(np.uint8) #  only for debugging
+                pred_masks[index] = (filtered_predictions_tensor == i).to(torch.uint8)
                 index += 1
 
             unique_target_labels = targets.unique()
-            num_labels = len(unique_target_labels)
-            target_masks = torch.zeros((num_labels, image_shape[0], image_shape[1]), dtype=torch.uint8)
-            for i, target in enumerate(unique_target_labels):
-                target_masks[i] = (targets == target).to(torch.uint8)
-
-
-
-
-
-
-            target_labels = torch.zeros(target_masks.shape[0], dtype=torch.uint8)
-            for i in range(0, target_masks.shape[0]):
-                binary_array = target_masks[i].cpu().numpy()
+            target_masks = []
+            target_labels = []
+            for target in unique_target_labels:
+                binary_tensor = (targets == target).to(torch.uint8)
+                binary_array = binary_tensor.cpu().numpy()
                 class_array = semantic_target.squeeze().cpu().numpy() * binary_array
                 selected_values = class_array[binary_array == 1]
                 selected_values_tensor = torch.tensor(selected_values, dtype=torch.float32)
@@ -297,8 +355,14 @@ def my_app(cfg: DictConfig) -> None:
                     most_frequent_value = selected_values_tensor.mode().values.item()
                 if torch.isnan(torch.tensor(most_frequent_value)):
                     most_frequent_value = 0
+                if len(selected_values) < 10:
+                    continue
+                target_masks.append(binary_tensor)
+                target_labels.append(int(most_frequent_value))
 
-                target_labels[i] = int(most_frequent_value)
+            target_masks = torch.stack(target_masks)
+            target_labels = torch.tensor(target_labels)
+
 
             if target_labels.size(0) == 1: #in this case there is no instance in the image that should be detected (only background)
                 if considering_background:
@@ -314,7 +378,7 @@ def my_app(cfg: DictConfig) -> None:
 
 
             pred_scores = torch.ones(pred_masks.shape[0])
-            #shape = pred_one_hot.shape[0]
+            #shape = pred_masks.shape[0]
             #pred_scores = torch.full((shape,), 0.5)
 
             pred_dict = {
@@ -369,6 +433,8 @@ def my_app(cfg: DictConfig) -> None:
         predicted_semantic_images[i].save(join(good_images_dir, f"semantic_predicted_{i}.png"))
         target_instance_images[i].save(join(good_images_dir, f"instance_target_{i}.png"))
         predicted_instance_images[i].save(join(good_images_dir, f"instance_predicted_{i}.png"))
+        filtered_predicted_semantic_images[i].save(join(good_images_dir, f"filtered_semantic_predicted_{i}.png"))
+        filtered_predicted_instance_images[i].save(join(good_images_dir, f"filtered_instance_predicted_{i}.png"))
 
     for i in worst_images_indices:
         real_images[i].save(join(bad_images_dir, f"real_img_{i}.png"))
@@ -376,6 +442,8 @@ def my_app(cfg: DictConfig) -> None:
         predicted_semantic_images[i].save(join(bad_images_dir, f"semantic_predicted_{i}.png"))
         target_instance_images[i].save(join(bad_images_dir, f"instance_target_{i}.png"))
         predicted_instance_images[i].save(join(bad_images_dir, f"instance_predicted_{i}.png"))
+        filtered_predicted_semantic_images[i].save(join(bad_images_dir, f"filtered_semantic_predicted_{i}.png"))
+        filtered_predicted_instance_images[i].save(join(bad_images_dir, f"filtered_instance_predicted_{i}.png"))
 
     for i in ten_constant_indices:
         real_images[i].save(join(constant_images_dir, f"real_img_{i}.png"))
@@ -383,6 +451,8 @@ def my_app(cfg: DictConfig) -> None:
         predicted_semantic_images[i].save(join(constant_images_dir, f"semantic_predicted_{i}.png"))
         target_instance_images[i].save(join(constant_images_dir, f"instance_target_{i}.png"))
         predicted_instance_images[i].save(join(constant_images_dir, f"instance_predicted_{i}.png"))
+        filtered_predicted_semantic_images[i].save(join(constant_images_dir, f"filtered_semantic_predicted_{i}.png"))
+        filtered_predicted_instance_images[i].save(join(constant_images_dir, f"filtered_instance_predicted_{i}.png"))
 
 
 
@@ -401,18 +471,18 @@ def get_best_and_worst_images(metric_per_image, top_n=10):
 
 
 
-def worker(procnum, return_dict, depth_array, mask):
+def worker(procnum, return_dict, depth_array, mask, distance, threshold):
     """worker function"""
     rel_depth = depth_array * mask
 
-    return_dict[procnum] = labelRangeImage(rel_depth)
+    return_dict[procnum] = labelRangeImage(rel_depth, distance, threshold)
 
 
 def filter_ignore_in_eval(target_labels, target_masks, considering_background=False):
     if considering_background:
-        consider_in_eval = [0, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+        consider_in_eval = [0, 17, 18, 19, 20, 21, 24, 25, 26]
     else:
-        consider_in_eval = [17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+        consider_in_eval = [17, 18, 19, 20, 21, 24, 25, 26]
     filtered_target_labels = []
     filtered_target_masks = []
     for i, label in enumerate(target_labels):

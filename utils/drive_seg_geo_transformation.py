@@ -105,7 +105,7 @@ def labelGround(y, x, labels, tans):
         q = q[1:]
 
 
-def labelRangeImage(range_image):
+def labelRangeImage(range_image, distance, threshold):
     labels = np.zeros(range_image.shape)
 
     l = 1
@@ -116,7 +116,7 @@ def labelRangeImage(range_image):
         for y in range(height):
             n = (y, x)
             if labels[n] <= 0 and range_image[n] > 0:
-                labelSegments(n, range_image, labels, l)
+                labelSegments(n, range_image, labels, l, distance, threshold)
                 l += 1
 
     # plotGraph(labels)
@@ -124,10 +124,10 @@ def labelRangeImage(range_image):
     return labels
 
 
-def labelSegments(n: Node, range_image, labels, label):
+def labelSegments(n: Node, range_image, labels, label, distance, threshold):
     q = [n]
     height, width = range_image.shape
-    distance = 3
+
 
     while len(q) > 0:
         n = q[0]
@@ -161,7 +161,7 @@ def labelSegments(n: Node, range_image, labels, label):
 
                 beta = np.arctan2(d2 * np.sin(phi), d1 - d2 * np.cos(phi))
 
-                if beta > 0.15:
+                if beta > threshold:
                     q.append(nn)
 
         q = q[1:]

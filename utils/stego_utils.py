@@ -232,8 +232,8 @@ def filter_classes_has_instance(mask):
         (0, 0, 142), #car 1
         (0, 0, 70), #truck 1
         (0, 60, 100), #bus 1
-        (0, 0, 90), #caravan
-        (0, 0, 110), #trailer
+        #(0, 0, 90), #caravan
+        #(0, 0, 110), #trailer
         (0, 80, 100), #train 1
         (0, 0, 230), #motorcycle 1
         (119, 11, 32) #bicycle 1

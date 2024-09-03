@@ -184,6 +184,31 @@ def get_transform(res, is_label, crop_type):
 
 
 
+
+def filter_big_classes(class_masks, classes):
+    num_classes = len(classes)
+    threshold = 1000 / (5/num_classes)
+    class_masks_filtered = []
+    classes_filtered = []
+    for i in range(num_classes):
+        if np.sum(class_masks[i]) > threshold: #check if the class has more than threshold pixels
+            class_masks_filtered.append(class_masks[i])
+            classes_filtered.append(classes[i])
+    if len(class_masks_filtered) == 0:
+        class_masks_filtered = class_masks
+        classes_filtered = classes
+    return class_masks_filtered, classes_filtered
+
+
+
+def filter_mask(mask):
+    mask = filter_classes_has_instance(mask)
+    return mask
+
+
+
+
+
 def filter_classes_has_instance(mask):
     image_shape = mask.shape
     has_instance_list = [
@@ -192,8 +217,8 @@ def filter_classes_has_instance(mask):
         (0, 0, 142),
         (0, 0, 70),
         (0, 60, 100),
-        (0, 0, 90),
-        (0, 0, 110),
+       # (0, 0, 90),
+       # (0, 0, 110),
         (0, 80, 100),
         (0, 0, 230),
         (119, 11, 32)

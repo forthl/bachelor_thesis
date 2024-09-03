@@ -4,6 +4,8 @@ from sklearn.mixture import BayesianGaussianMixture
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics import silhouette_score
 from sklearn.cluster import DBSCAN
+from sklearn.cluster import OPTICS
+from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
 
@@ -119,10 +121,11 @@ class GaussianMixtureModel:
 
 
 class BayesianGaussianMixtureModel:
-    def __init__(self, data, max_k=20, n_init=5,
-                 covariance_type='full', init_params='kmeans'):
+    def __init__(self, data, max_k=20, bgmm_weights_threshold=0.05, n_init=10,
+                 covariance_type='full', init_params='random'):
         self.data = data
         self.max_k = max_k
+        self.bgmm_weights_threshold = bgmm_weights_threshold
         self.n_init = n_init
         self.covariance_type = covariance_type
         self.init_params = init_params
@@ -132,13 +135,13 @@ class BayesianGaussianMixtureModel:
                                        init_params=self.init_params)
         bgmm.fit(self.data)
         bgmm_weights = bgmm.weights_
-        optimal_k = (np.round(bgmm_weights, 2) > 0.05).sum()
+        optimal_k = (np.round(bgmm_weights, 2) > self.bgmm_weights_threshold).sum()
 
         return optimal_k
 
     def bgmm_clustering(self, k):
         bgmm = BayesianGaussianMixture(n_components=k, covariance_type=self.covariance_type,
-                                       init_params=self.init_params, max_iter=1000).fit(self.data)
+                                       init_params=self.init_params, max_iter=2000).fit(self.data)
 
         # data points assigned to a cluster
         labels = bgmm.predict(self.data)
@@ -161,5 +164,39 @@ class Dbscan:
     def find_clusters(self):
         dbscan = DBSCAN(eps=self.epsilon, min_samples=self.min_samples)
         labels = dbscan.fit_predict(self.data)
+
+        return labels
+
+
+class Optics:
+    def __init__(self, data, min_samples, max_eps=None, metric='minkowski', cluster_method='xi'):
+        self.data = data
+        self.min_samples = min_samples
+        self.max_eps = max_eps
+        self.metric = metric
+        self.cluster_method = cluster_method
+
+    def find_clusters(self):
+        optics = OPTICS(min_samples=self.min_samples, max_eps=self.max_eps, metric=self.metric,
+                        cluster_method=self.cluster_method)
+        labels = optics.fit_predict(self.data)
+
+        return labels
+
+
+class Kmeans:
+    def __init__(self, data, n_clusters=8, init='k-means++', n_init=10, max_iter=300, tol=1e-4, random_state=None):
+        self.data = data
+        self.n_clusters = n_clusters
+        self.init = init
+        self.n_init = n_init
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+
+    def find_clusters(self):
+        kmeans = KMeans(n_clusters=self.n_clusters, init=self.init, n_init=self.n_init,
+                        max_iter=self.max_iter, tol=self.tol, random_state=self.random_state)
+        labels = kmeans.fit_predict(self.data)
 
         return labels

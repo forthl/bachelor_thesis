@@ -4,6 +4,7 @@ import open3d as o3d
 import torch
 
 from utils import cluster_algorithms
+from utils.utils_folder.stego_utils import filter_big_classes
 
 
 # get masks from segmentations from gep_seg
@@ -22,8 +23,8 @@ class_colors = {
     (0, 0, 142): 19,  # car 1
     (0, 0, 70): 20,  # truck 1
     (0, 60, 100): 21,  # bus 1
-    (0, 0, 90): 22,  # caravan
-    (0, 0, 110): 23,  # trailer
+    #(0, 0, 90): 22,  # caravan
+    #(0, 0, 110): 23,  # trailer
     (0, 80, 100): 24,  # train 1
     (0, 0, 230): 25,  # motorcycle 1
     (119, 11, 32): 26  # bicycle 1
@@ -44,6 +45,7 @@ def get_segmentation_masks(img):
 
         rgb_color = tuple(np.mean(img_rgb[segmentation], axis=0).astype(int))
         classes.append(class_colors[rgb_color])
+        segmentation_size = img_rgb[segmentation].shape
 
     return masks, classes
 
@@ -122,13 +124,19 @@ def project_disparity_to_3d(depth_map):  # debug this shit cause the rescaling i
     return point_cloud
 
 
+
+
 def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_shape, clustering_algorithm, epsilon,
-                                  min_samples, project_data=False):
+                                  min_samples, max_eps, metric, cluster_method, n_clusters,max_k, bgmm_weights_threshold, covariance_type, init_params, project_data=False, filtering_big_classes = False):
     labels_list = []
 
     class_masks, classes = get_segmentation_masks(filtered_segmentation_mask)
     class_masks.pop(0) # remove the first element which is the mask containing pixels which are classes with no atributtes(e.g. road, building)
     classes.pop(0) # remove the first element which is the mask containing pixels which are classes with no atributtes(e.g. road, building)
+
+    if filtering_big_classes:
+        class_masks, classes = filter_big_classes(class_masks, classes)
+
     masked_depths = get_masked_depth(depth_map, class_masks)
 
     point_clouds = []
@@ -148,12 +156,16 @@ def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_s
         if point_cloud.shape[0] <= 1:  # TODO check if it is an empty point cloud. Look into this bug later
             continue
 
-        max_k = min(20, point_cloud.shape[0])
+        max_k = min(max_k, point_cloud.shape[0])
 
         if clustering_algorithm == "bgmm":
-            cl = cluster_algorithms.BayesianGaussianMixtureModel(data=point_cloud, max_k=max_k)
+            cl = cluster_algorithms.BayesianGaussianMixtureModel(data=point_cloud, max_k=max_k,  bgmm_weights_threshold=bgmm_weights_threshold, covariance_type=covariance_type, init_params=init_params)
         elif clustering_algorithm == "dbscan":
             cl = cluster_algorithms.Dbscan(point_cloud, epsilon, min_samples)
+        elif clustering_algorithm == "optics":
+            cl = cluster_algorithms.Optics(point_cloud, min_samples=min(min_samples,point_cloud.shape[0]), max_eps=max_eps, metric=metric, cluster_method=cluster_method)
+        elif clustering_algorithm == "kmeans":
+            cl = cluster_algorithms.Kmeans(point_cloud, n_clusters=n_clusters)
 
         try:
             labels = cl.find_clusters()
@@ -164,7 +176,7 @@ def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_s
 
         if project_data:
             point_cloud = unproject_point_cloud(
-                point_cloud)  # maybe try just projecting the data and getting the labels and keeping an unprojected copy of the data
+                point_cloud)
 
         class_instance_mask = np.zeros(image_shape)
 
@@ -172,6 +184,8 @@ def segmentation_to_instance_mask(filtered_segmentation_mask, depth_map, image_s
             class_instance_mask[int(point[0]), int(point[1])] = labels[index]
 
         num_clusters = len(set(labels))
+        if 0 in labels:
+            num_clusters -= 1
         class_instance_mask = np.where(class_instance_mask != 0, class_instance_mask + current_num_instances, 0)
 
         instance_mask = np.add(instance_mask, class_instance_mask)

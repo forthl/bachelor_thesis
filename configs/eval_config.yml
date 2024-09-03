@@ -2,10 +2,23 @@ output_root: '../'
 pytorch_data_dir: '/home/stud/forl/storage/user/datadrive/pytorch-data/'
 results_dir: '/home/stud/forl/bachelor_thesis/'
 experiment_name: "cityscapes"
-clustering_algorithm: "bgmm" #("dbscan" or "bgmm" or "geo" or "no_clustering")
+projection: True
+clustering_algorithm: "kmeans" #("dbscan" or "optics" or "kmeans" or "bgmm" or "geo" or "no_clustering")
 considering_background: False
-epsilon: 600 #used if dbscan is the clustering algorithm
-min_samples: 55 #used if dbscan is the clustering algorithm
+filtering_big_classes: False
+filtering_instances: False
+epsilon: 1500 #used if dbscan is the clustering algorithm
+min_samples: 100 #used if dbscan or optics is the clustering algorithm
+max_eps: 2000 #used if optics is the clustering algorithm
+metric: "minkowski" #used if optics is the clustering algorithm
+cluster_method: "dbscan" #used if optics is the clustering algorithm
+n_clusters: 10 #used if kmeans is the clustering algorithm
+threshold: 0.3 #used if geo is the clustering algorithm
+distance: 6 #used if geo is the clustering algorithm
+max_k: 15 #used if bgmm is the clustering algorithm
+bgmm_weights_threshold: 0.1 #used if bgmm is the clustering algorithm
+covariance_type: "full" #used if bgmm is the clustering algorithm
+init_params: "kmeans" #used if bgmm is the clustering algorithm
 res: 320
 batch_size: 1
 num_workers: 1
